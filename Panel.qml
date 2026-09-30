@@ -413,7 +413,11 @@ Panel {
             var parts = [Model.typeLabel(p)]
             if (p.device) parts.push(p.device)
             if (row.busy) parts.push(p.active ? "disconnecting…" : "connecting…")
-            else if (!p.active) parts.push(p.endpoint ? "off · " + p.endpoint : "off")
+            else if (!p.active) {
+              parts.push("off")
+              if (p.fullTunnel !== undefined) parts.push(p.fullTunnel ? "full" : "split")
+              if (p.endpoint) parts.push(p.endpoint)
+            }
             return parts.join(" · ")
           }
           color: root.bar.foreground
@@ -486,9 +490,20 @@ Panel {
       }
       CopyPair { visible: !!row.profile.endpoint; label: "Endpoint"; value: row.profile.endpoint || "" }
       InfoPair {
-        visible: row.isVpn && row.profile.fullTunnel !== undefined
+        visible: row.isVpn && (row.profile.fullTunnel !== undefined || row.profile.routes !== undefined)
         label: "Routing"
-        value: row.profile.fullTunnel ? "Full tunnel" : "Split · " + (row.profile.allowedIps || []).join(", ")
+        value: row.profile.fullTunnel ? "Full tunnel · all traffic" : "Split tunnel · listed IPs only"
+      }
+      Repeater {
+        model: row.isVpn ? Model.routeRows(row.profile, 8) : []
+        CopyPair {
+          required property var modelData
+          label: modelData.label
+          value: modelData.value
+          suffix: modelData.hint
+          copyable: !modelData.more
+          tooltip: modelData.more ? modelData.all : ""
+        }
       }
       InfoPair { visible: root.uptimeFor(row.profile) !== ""; label: "Up for"; value: root.uptimeFor(row.profile) }
       InfoPair {
@@ -535,17 +550,27 @@ Panel {
   // InfoPair whose value copies to the clipboard on click.
   component CopyPair: InfoPair {
     id: copyPair
-    displayValue: root.copiedValue !== "" && root.copiedValue === value ? "Copied" : value
+    property string suffix: ""
+    property bool copyable: true
+    property string tooltip: ""
+    displayValue: root.copiedValue !== "" && root.copiedValue === value
+      ? "Copied"
+      : value + (suffix ? "  (" + suffix + ")" : "")
 
     MouseArea {
       id: copyMouse
       anchors.fill: copyPair.valueItem
       hoverEnabled: true
-      cursorShape: Qt.PointingHandCursor
-      onClicked: root.copy(copyPair.value)
+      cursorShape: copyPair.copyable ? Qt.PointingHandCursor : Qt.ArrowCursor
+      onClicked: if (copyPair.copyable) root.copy(copyPair.value)
     }
 
-    Binding { target: copyPair.valueItem; property: "font.underline"; value: copyMouse.containsMouse }
+    Binding { target: copyPair.valueItem; property: "font.underline"; value: copyPair.copyable && copyMouse.containsMouse }
+
+    PanelToolTip {
+      visible: copyPair.tooltip !== "" && copyMouse.containsMouse
+      text: copyPair.tooltip
+    }
   }
 
   component InfoLabel: Text {

@@ -58,17 +58,33 @@ while IFS=$'\x1f' read -r name uuid type device active autoconnect timestamp; do
   fi
 
   if [[ "$type" == "wireguard" ]]; then
-    # First peer only; "allowed-ips=a;b endpoint=host:port persistent-keepalive=N"
-    peer=$(nmcli -g wireguard.peers connection show uuid "$uuid" 2>/dev/null | head -n1 | sed 's/\\:/:/g')
-    endpoint=$(grep -oP 'endpoint=\K\S+' <<<"$peer" || true)
-    allowed=$(grep -oP 'allowed-ips=\K\S+' <<<"$peer" || true)
-    full=false
-    [[ ";$allowed;" == *";0.0.0.0/0;"* || ";$allowed;" == *";::/0;"* ]] && full=true
-    details=$(jq --arg endpoint "$endpoint" --arg allowed "$allowed" --argjson full "$full" \
-      '. + {endpoint: $endpoint, allowedIps: ($allowed | split(";") | map(select(. != ""))), fullTunnel: $full}' <<<"$details")
-  elif [[ "$type" == "vpn" ]]; then
-    service=$(nmcli -g vpn.service-type connection show uuid "$uuid" 2>/dev/null | sed 's/.*\.//')
-    details=$(jq --arg s "$service" '. + {serviceType: $s}' <<<"$details")
+    # Peers print as "KEY allowed-ips=a;b endpoint=host:port ...", joined by
+    # ", " when there are several. Split on the base64 public keys.
+    peers=$(nmcli -g wireguard.peers connection show uuid "$uuid" 2>/dev/null | sed 's/\\:/:/g' \
+      | grep -oP '[A-Za-z0-9+/]{42,43}=\s[^,]*' || true)
+    peers_json=$(while read -r peer; do
+      [[ -z "$peer" ]] && continue
+      jq -n --arg endpoint "$(grep -oP 'endpoint=\K\S+' <<<"$peer" || true)" \
+        --arg allowed "$(grep -oP 'allowed-ips=\K\S+' <<<"$peer" || true)" \
+        '{endpoint: $endpoint, allowedIps: ($allowed | split(";") | map(select(. != "")))}'
+    done <<<"$peers" | jq -s .)
+    details=$(jq --argjson peers "${peers_json:-[]}" '
+      ($peers | map(.allowedIps) | add // []) as $ips
+      | . + {peers: $peers,
+             endpoint: ($peers | map(.endpoint) | map(select(. != "")) | join(", ")),
+             allowedIps: $ips,
+             fullTunnel: ($ips | any(. == "0.0.0.0/0" or . == "::/0"))}' <<<"$details")
+  elif [[ "$type" == "vpn" || "$type" == "tun" ]]; then
+    if [[ "$type" == "vpn" ]]; then
+      service=$(nmcli -g vpn.service-type connection show uuid "$uuid" 2>/dev/null | sed 's/.*\.//')
+      details=$(jq --arg s "$service" '. + {serviceType: $s}' <<<"$details")
+    fi
+    # No allowed-ips concept: list the routes NM installed on the device.
+    if [[ "$active" == "yes" && -n "$device" ]]; then
+      routes=$(nmcli -t -f IP4.ROUTE,IP6.ROUTE device show "$device" 2>/dev/null \
+        | grep -oP 'dst = \K[^,]+' | grep -v '^fe80' | json_lines)
+      details=$(jq --argjson r "$routes" '. + {routes: $r}' <<<"$details")
+    fi
   fi
 
   # Traffic actually routed through this device (catches full tunnels that
