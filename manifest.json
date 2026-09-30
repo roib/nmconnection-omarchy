@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "local.nmstatus",
+  "name": "NM Status",
+  "version": "1.0.0",
+  "author": "b",
+  "license": "MIT",
+  "description": "NetworkManager connection status with a focus on VPN / WireGuard tunnels.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "NM Status",
+    "description": "Shows whether a VPN (WireGuard, etc.) is up; popup lists connections with details and toggles.",
+    "category": "Network",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 10,
+      "showWarningTint": true
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 2,
+        "max": 3600,
+        "step": 1,
+        "defaultValue": 10
+      },
+      {
+        "key": "showWarningTint",
+        "type": "boolean",
+        "label": "Tint icon when connectivity is limited",
+        "defaultValue": true
+      }
+    ]
+  }
+}

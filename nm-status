@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# Collect NetworkManager connection state as a single JSON document for the
+# local.nmstatus bar widget. Read-only: never changes any connection.
+set -uo pipefail
+
+# nmcli -t separates fields with ':' and escapes literal ':' and '\' in values.
+# Convert one terse line to \x1f-separated fields with escapes resolved.
+nm_split() {
+  sed -e 's/\\\\/\x01/g' -e 's/\\:/\x02/g' -e 's/:/\x1f/g' -e 's/\x02/:/g' -e 's/\x01/\\/g'
+}
+
+# Print the value of a "KEY:value" terse line group for a given key prefix.
+field_values() {
+  local prefix="$1"
+  awk -v p="$prefix" 'index($0, p) == 1 { sub(/^[^:]*:/, ""); if ($0 != "" && $0 != "--") print }'
+}
+
+json_lines() { jq -R . | jq -s .; }
+
+connectivity=$(nmcli -t networking connectivity 2>/dev/null || echo unknown)
+editor=false
+command -v nm-connection-editor >/dev/null 2>&1 && editor=true
+
+wifi_line=$(nmcli -t -f ACTIVE,SSID,SIGNAL,FREQ device wifi list --rescan no 2>/dev/null | grep '^yes:' | head -n1 | nm_split)
+
+profiles_json="[]"
+while IFS=$'\x1f' read -r name uuid type device active autoconnect timestamp; do
+  [[ -z "$uuid" || "$type" == "loopback" ]] && continue
+
+  details='{}'
+  if [[ "$active" == "yes" && -n "$device" ]]; then
+    show=$(nmcli -t -f IP4,IP6 device show "$device" 2>/dev/null)
+    ip4=$(field_values "IP4.ADDRESS" <<<"$show" | json_lines)
+    ip6=$(field_values "IP6.ADDRESS" <<<"$show" | grep -v '^fe80' | json_lines)
+    dns=$( { field_values "IP4.DNS" <<<"$show"; field_values "IP6.DNS" <<<"$show"; } | json_lines)
+    gw4=$(field_values "IP4.GATEWAY" <<<"$show" | head -n1)
+    gw6=$(field_values "IP6.GATEWAY" <<<"$show" | head -n1)
+    rx=$(cat "/sys/class/net/$device/statistics/rx_bytes" 2>/dev/null || echo 0)
+    tx=$(cat "/sys/class/net/$device/statistics/tx_bytes" 2>/dev/null || echo 0)
+    speed=$(cat "/sys/class/net/$device/speed" 2>/dev/null || true)
+    [[ "$speed" =~ ^[0-9]+$ ]] || speed=""
+
+    details=$(jq -n --argjson ip4 "$ip4" --argjson ip6 "$ip6" --argjson dns "$dns" \
+      --arg gw4 "$gw4" --arg gw6 "$gw6" --argjson rx "${rx:-0}" --argjson tx "${tx:-0}" --arg speed "$speed" \
+      '{ip4: $ip4, ip6: $ip6, dns: $dns, gateway: $gw4, gateway6: $gw6, rx: $rx, tx: $tx,
+        speed: (if $speed == "" then null else ($speed | tonumber) end)}')
+
+    if [[ "$type" == "802-11-wireless" && -n "$wifi_line" ]]; then
+      IFS=$'\x1f' read -r _ ssid signal freq <<<"$wifi_line"
+      details=$(jq --arg ssid "$ssid" --arg signal "$signal" --arg freq "$freq" \
+        '. + {ssid: $ssid, signal: ($signal | tonumber? // null), freq: $freq}' <<<"$details")
+    fi
+  fi
+
+  if [[ "$type" == "wireguard" ]]; then
+    # First peer only; "allowed-ips=a;b endpoint=host:port persistent-keepalive=N"
+    peer=$(nmcli -g wireguard.peers connection show uuid "$uuid" 2>/dev/null | head -n1 | sed 's/\\:/:/g')
+    endpoint=$(grep -oP 'endpoint=\K\S+' <<<"$peer" || true)
+    allowed=$(grep -oP 'allowed-ips=\K\S+' <<<"$peer" || true)
+    full=false
+    [[ ";$allowed;" == *";0.0.0.0/0;"* || ";$allowed;" == *";::/0;"* ]] && full=true
+    details=$(jq --arg endpoint "$endpoint" --arg allowed "$allowed" --argjson full "$full" \
+      '. + {endpoint: $endpoint, allowedIps: ($allowed | split(";") | map(select(. != ""))), fullTunnel: $full}' <<<"$details")
+  elif [[ "$type" == "vpn" ]]; then
+    service=$(nmcli -g vpn.service-type connection show uuid "$uuid" 2>/dev/null | sed 's/.*\.//')
+    details=$(jq --arg s "$service" '. + {serviceType: $s}' <<<"$details")
+  fi
+
+  # Traffic actually routed through this device (catches full tunnels that
+  # aren't expressed as 0.0.0.0/0 allowed-ips, e.g. OpenVPN redirect-gateway).
+  if [[ "$active" == "yes" && -n "$device" ]]; then
+    route_dev=$(ip route get 1.1.1.1 2>/dev/null | grep -oP ' dev \K\S+' | head -n1)
+    [[ "$route_dev" == "$device" ]] && details=$(jq '. + {defaultRoute: true, fullTunnel: true}' <<<"$details")
+  fi
+
+  profiles_json=$(jq --arg name "$name" --arg uuid "$uuid" --arg type "$type" --arg device "$device" \
+    --arg active "$active" --arg auto "$autoconnect" --arg ts "$timestamp" --argjson details "$details" \
+    '. + [{name: $name, uuid: $uuid, type: $type, device: $device,
+           active: ($active == "yes"), autoconnect: ($auto == "yes"),
+           timestamp: ($ts | tonumber? // 0)} + $details]' <<<"$profiles_json")
+done < <(nmcli -t -f NAME,UUID,TYPE,DEVICE,ACTIVE,AUTOCONNECT,TIMESTAMP connection show 2>/dev/null | nm_split)
+
+# systemd-resolved: which links answer the catch-all ("Default Route: yes").
+dns_json=$(resolvectl status --no-pager 2>/dev/null | awk '
+  /^Link [0-9]+ \(/ { if (link != "") emit(); link = $3; gsub(/[()]/, "", link); server = ""; def = "no"; next }
+  /^Global/ { if (link != "") emit(); link = ""; next }
+  link != "" && /Current DNS Server:/ { server = $NF }
+  link != "" && /Default Route:/ { def = $NF }
+  function emit() { printf "%s\t%s\t%s\n", link, server, def }
+  END { if (link != "") emit() }
+' | jq -R 'split("\t") | {link: .[0], server: .[1], defaultRoute: (.[2] == "yes")}' | jq -s .)
+[[ -z "$dns_json" ]] && dns_json="[]"
+
+jq -n --arg connectivity "$connectivity" --argjson editor "$editor" \
+  --argjson profiles "$profiles_json" --argjson dns "$dns_json" \
+  '{connectivity: $connectivity, editor: $editor, profiles: $profiles, dns: $dns}'
