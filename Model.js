@@ -126,24 +126,21 @@ function formatUptime(seconds) {
   return Math.floor(seconds) + "s"
 }
 
-// Rows for the "what goes through this tunnel" list: WireGuard allowed IPs,
-// or the routes NM installed for other VPN types. `cap` (optional) collapses
-// the tail into a "+N more" row.
+// What goes through a tunnel: WireGuard allowed IPs, or the routes NM
+// installed for other VPN types.
+function tunnelRoutes(profile) {
+  if (!profile) return []
+  return (profile.type === "wireguard" ? profile.allowedIps : profile.routes) || []
+}
+
+function routesLabel(profile) {
+  return profile && profile.type === "wireguard" ? "Allowed IPs" : "Routes"
+}
+
 var routeHints = { "0.0.0.0/0": "all IPv4", "::/0": "all IPv6" }
 
-function routeRows(profile, cap) {
-  if (!profile) return []
-  var isWg = profile.type === "wireguard"
-  var list = (isWg ? profile.allowedIps : profile.routes) || []
-  var label = isWg ? "Allowed IPs" : "Routes"
-  var limit = cap > 0 && list.length > cap ? cap - 1 : list.length
-  var rows = list.slice(0, limit).map(function(cidr, i) {
-    return { label: i === 0 ? label : "", value: cidr, hint: routeHints[cidr] || "", more: false }
-  })
-  if (limit < list.length)
-    rows.push({ label: "", value: "+" + (list.length - limit) + " more", hint: "", more: true,
-                all: list.slice(limit).join(", ") })
-  return rows
+function routeHint(cidr) {
+  return routeHints[cidr] || ""
 }
 
 function stripPrefix(addr) {

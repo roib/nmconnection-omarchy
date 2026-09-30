@@ -196,7 +196,9 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(400))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(640))
+    // Only scrolls as a whole if it would be taller than the screen; long
+    // route lists scroll inside their own box instead.
+    contentHeight: panel.fittedContentHeight(column.implicitHeight)
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -521,16 +523,10 @@ Panel {
         label: "Routing"
         value: row.profile.fullTunnel ? "Full tunnel · all traffic" : "Split tunnel · listed IPs only"
       }
-      Repeater {
-        model: row.isVpn ? Model.routeRows(row.profile) : []
-        CopyPair {
-          required property var modelData
-          label: modelData.label
-          value: modelData.value
-          suffix: modelData.hint
-          copyable: !modelData.more
-          tooltip: modelData.more ? modelData.all : ""
-        }
+      RouteList {
+        visible: row.isVpn && items.length > 0
+        label: Model.routesLabel(row.profile)
+        items: row.isVpn ? Model.tunnelRoutes(row.profile) : []
       }
       InfoPair { visible: root.uptimeFor(row.profile) !== ""; label: "Up for"; value: root.uptimeFor(row.profile) }
       InfoPair {
@@ -578,8 +574,6 @@ Panel {
   component CopyPair: InfoPair {
     id: copyPair
     property string suffix: ""
-    property bool copyable: true
-    property string tooltip: ""
     displayValue: root.copiedValue !== "" && root.copiedValue === value
       ? "Copied"
       : value + (suffix ? "  (" + suffix + ")" : "")
@@ -588,15 +582,65 @@ Panel {
       id: copyMouse
       anchors.fill: copyPair.valueItem
       hoverEnabled: true
-      cursorShape: copyPair.copyable ? Qt.PointingHandCursor : Qt.ArrowCursor
-      onClicked: if (copyPair.copyable) root.copy(copyPair.value)
+      cursorShape: Qt.PointingHandCursor
+      onClicked: root.copy(copyPair.value)
     }
 
-    Binding { target: copyPair.valueItem; property: "font.underline"; value: copyPair.copyable && copyMouse.containsMouse }
+    Binding { target: copyPair.valueItem; property: "font.underline"; value: copyMouse.containsMouse }
+  }
 
-    PanelToolTip {
-      visible: copyPair.tooltip !== "" && copyMouse.containsMouse
-      text: copyPair.tooltip
+  // Label on the left, copyable CIDRs on the right. Beyond `maxRows` entries
+  // the list scrolls inside its own box so the rest of the popup stays put.
+  component RouteList: Item {
+    id: routeList
+    property string label: ""
+    property var items: []
+    property int maxRows: 8
+    readonly property real rowHeight: routeMetrics.height + listColumn.spacing
+    readonly property bool scrolls: items.length > maxRows
+
+    width: parent ? parent.width - (parent.leftPadding || 0) : 0
+    implicitHeight: scrolls ? rowHeight * maxRows - listColumn.spacing : listColumn.implicitHeight
+
+    FontMetrics {
+      id: routeMetrics
+      font.family: root.bar.fontFamily
+      font.pixelSize: Style.font.bodySmall
+    }
+
+    InfoLabel {
+      id: routeLabel
+      anchors.left: parent.left
+      anchors.top: parent.top
+      text: routeList.label + (routeList.scrolls ? " (" + routeList.items.length + ")" : "")
+    }
+
+    ScrollView {
+      id: routeScroll
+      anchors.right: parent.right
+      anchors.top: parent.top
+      width: parent.width - routeLabel.implicitWidth - Style.space(12)
+      height: parent.implicitHeight
+      clip: true
+      ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+      ScrollBar.vertical.policy: routeList.scrolls ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+
+      Column {
+        id: listColumn
+        // Leave room for the scrollbar so it doesn't cover the addresses.
+        width: routeScroll.availableWidth - (routeList.scrolls ? Style.space(10) : 0)
+        spacing: Style.spacing.labelGap
+
+        Repeater {
+          model: routeList.items
+          CopyPair {
+            required property var modelData
+            label: ""
+            value: modelData
+            suffix: Model.routeHint(modelData)
+          }
+        }
+      }
     }
   }
 
