@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -93,6 +94,18 @@ Panel {
     close()
   }
 
+  // Scroll the popup so `item` is fully visible.
+  function ensureVisible(item) {
+    var flick = scrollArea.contentItem
+    if (!item || !flick || flick.contentY === undefined) return
+    var top = item.mapToItem(flick.contentItem, 0, 0).y
+    var bottom = top + item.height
+    var margin = Style.space(6)
+    if (top - margin < flick.contentY) flick.contentY = Math.max(0, top - margin)
+    else if (bottom + margin > flick.contentY + flick.height)
+      flick.contentY = Math.min(flick.contentHeight - flick.height, bottom + margin - flick.height)
+  }
+
   function moveCursor(delta) {
     if (rows.length === 0) return
     if (!cursorActive || cursorIndex < 0) { cursorActive = true; cursorIndex = 0; return }
@@ -183,7 +196,7 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(400))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight)
+    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(640))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -196,174 +209,185 @@ Panel {
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
-      Column {
-        id: column
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        spacing: Style.space(12)
-
-        // ---------- Hero: shield · VPN status · connectivity badge ----------
-        Item {
-          width: parent.width
-          implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight)
-
-          Text {
-            id: heroIcon
-            textFormat: Text.PlainText
-            text: root.vpnUp ? root.glyphOn : root.glyphOff
-            color: root.vpnUp ? root.green : root.bar.foreground
-            font.family: root.bar.fontFamily
-            font.pixelSize: Style.font.display
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-          }
-
-          Column {
-            id: heroLabels
-            anchors.left: heroIcon.right
-            anchors.leftMargin: Style.space(14)
-            anchors.right: badge.left
-            anchors.rightMargin: Style.space(10)
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(2)
-
-            Text {
-              textFormat: Text.PlainText
-              text: "Network"
-              color: root.bar.foreground
-              font.family: root.bar.fontFamily
-              font.pixelSize: Style.font.title
-              font.bold: true
-            }
-
-            Text {
-              textFormat: Text.PlainText
-              width: parent.width
-              elide: Text.ElideRight
-              text: {
-                var v = Model.activeVpns(root.nm)
-                return (v.length ? "VPN · " + v.map(function(p) { return p.name }).join(", ") : "VPN off").toUpperCase()
-              }
-              color: Qt.darker(root.bar.foreground, 1.4)
-              font.family: root.bar.fontFamily
-              font.pixelSize: Style.font.caption
-              font.bold: true
-              font.letterSpacing: 1.2
-            }
-          }
-
-          Rectangle {
-            id: badge
-            visible: Model.connectivityLabel(root.nm) !== ""
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            radius: Style.cornerRadius > 0 ? height / 2 : 0
-            width: badgeText.implicitWidth + Style.space(14)
-            height: badgeText.implicitHeight + Style.space(6)
-            color: "transparent"
-            border.width: 1
-            border.color: Model.connectivityOk(root.nm) ? Qt.rgba(root.bar.foreground.r, root.bar.foreground.g, root.bar.foreground.b, 0.35) : root.bar.urgent
-
-            Text {
-              id: badgeText
-              anchors.centerIn: parent
-              textFormat: Text.PlainText
-              text: Model.connectivityLabel(root.nm).toUpperCase()
-              color: Model.connectivityOk(root.nm) ? root.bar.foreground : root.bar.urgent
-              font.family: root.bar.fontFamily
-              font.pixelSize: Style.font.caption
-              font.bold: true
-              font.letterSpacing: 1.2
-            }
-          }
+      ScrollView {
+        id: scrollArea
+        anchors.fill: parent
+        clip: true
+        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+        ScrollBar.vertical.policy: column.implicitHeight > height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+        Binding {
+          target: scrollArea.contentItem
+          property: "interactive"
+          value: column.implicitHeight > scrollArea.height
         }
 
-        // ---------- DNS ----------
         Column {
-          width: parent.width
-          spacing: Style.spacing.labelGap
-          visible: root.nm !== null
+          id: column
+          width: scrollArea.availableWidth
+          spacing: Style.space(12)
 
-          InfoPair {
-            label: "DNS"
-            value: Model.defaultDns(root.nm).map(function(l) { return l.server + " (" + l.link + ")" }).join(", ") || "—"
-          }
-
-          Text {
-            visible: Model.dnsLeaks(root.nm)
+          // ---------- Hero: shield · VPN status · connectivity badge ----------
+          Item {
             width: parent.width
-            wrapMode: Text.WordWrap
-            textFormat: Text.PlainText
-            text: "⚠ DNS queries can go outside the VPN"
-            color: root.bar.urgent
-            font.family: root.bar.fontFamily
-            font.pixelSize: Style.font.bodySmall
-          }
-        }
+            implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight)
 
-        PanelSeparator { foreground: root.bar.foreground }
+            Text {
+              id: heroIcon
+              textFormat: Text.PlainText
+              text: root.vpnUp ? root.glyphOn : root.glyphOff
+              color: root.vpnUp ? root.green : root.bar.foreground
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.display
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+            }
 
-        // ---------- VPN profiles ----------
-        Column {
-          width: parent.width
-          spacing: Style.space(10)
+            Column {
+              id: heroLabels
+              anchors.left: heroIcon.right
+              anchors.leftMargin: Style.space(14)
+              anchors.right: badge.left
+              anchors.rightMargin: Style.space(10)
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(2)
 
-          PanelSectionHeader {
-            text: "VPN"
-            foreground: root.bar.foreground
-            fontFamily: root.bar.fontFamily
-          }
+              Text {
+                textFormat: Text.PlainText
+                text: "Network"
+                color: root.bar.foreground
+                font.family: root.bar.fontFamily
+                font.pixelSize: Style.font.title
+                font.bold: true
+              }
 
-          Repeater {
-            model: root.vpnList
-            ConnectionRow {
-              required property var modelData
-              required property int index
-              profile: modelData
-              rowIndex: index
+              Text {
+                textFormat: Text.PlainText
+                width: parent.width
+                elide: Text.ElideRight
+                text: {
+                  var v = Model.activeVpns(root.nm)
+                  return (v.length ? "VPN · " + v.map(function(p) { return p.name }).join(", ") : "VPN off").toUpperCase()
+                }
+                color: Qt.darker(root.bar.foreground, 1.4)
+                font.family: root.bar.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                font.letterSpacing: 1.2
+              }
+            }
+
+            Rectangle {
+              id: badge
+              visible: Model.connectivityLabel(root.nm) !== ""
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              radius: Style.cornerRadius > 0 ? height / 2 : 0
+              width: badgeText.implicitWidth + Style.space(14)
+              height: badgeText.implicitHeight + Style.space(6)
+              color: "transparent"
+              border.width: 1
+              border.color: Model.connectivityOk(root.nm) ? Qt.rgba(root.bar.foreground.r, root.bar.foreground.g, root.bar.foreground.b, 0.35) : root.bar.urgent
+
+              Text {
+                id: badgeText
+                anchors.centerIn: parent
+                textFormat: Text.PlainText
+                text: Model.connectivityLabel(root.nm).toUpperCase()
+                color: Model.connectivityOk(root.nm) ? root.bar.foreground : root.bar.urgent
+                font.family: root.bar.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                font.letterSpacing: 1.2
+              }
             }
           }
 
-          EmptyText { visible: root.nm !== null && root.vpnList.length === 0; text: "No VPN profiles" }
-        }
+          // ---------- DNS ----------
+          Column {
+            width: parent.width
+            spacing: Style.spacing.labelGap
+            visible: root.nm !== null
 
-        PanelSeparator { foreground: root.bar.foreground }
+            InfoPair {
+              label: "DNS"
+              value: Model.defaultDns(root.nm).map(function(l) { return l.server + " (" + l.link + ")" }).join(", ") || "—"
+            }
 
-        // ---------- Other active connections ----------
-        Column {
-          width: parent.width
-          spacing: Style.space(10)
-
-          PanelSectionHeader {
-            text: "CONNECTIONS"
-            foreground: root.bar.foreground
-            fontFamily: root.bar.fontFamily
-          }
-
-          Repeater {
-            model: root.otherList
-            ConnectionRow {
-              required property var modelData
-              required property int index
-              profile: modelData
-              rowIndex: root.vpnList.length + index
+            Text {
+              visible: Model.dnsLeaks(root.nm)
+              width: parent.width
+              wrapMode: Text.WordWrap
+              textFormat: Text.PlainText
+              text: "⚠ DNS queries can go outside the VPN"
+              color: root.bar.urgent
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.bodySmall
             }
           }
 
-          EmptyText { visible: root.nm !== null && root.otherList.length === 0; text: "No active connections" }
-        }
+          PanelSeparator { foreground: root.bar.foreground }
 
-        Button {
-          visible: root.nm !== null && root.nm.editor === true
-          width: parent.width
-          text: "Open connection editor"
-          iconText: String.fromCodePoint(0xF0493)
-          fontSize: Style.font.bodySmall
-          foreground: root.bar.foreground
-          fontFamily: root.bar.fontFamily
-          bordered: true
-          onClicked: root.openEditor()
+          // ---------- VPN profiles ----------
+          Column {
+            width: parent.width
+            spacing: Style.space(10)
+
+            PanelSectionHeader {
+              text: "VPN"
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+            }
+
+            Repeater {
+              model: root.vpnList
+              ConnectionRow {
+                required property var modelData
+                required property int index
+                profile: modelData
+                rowIndex: index
+              }
+            }
+
+            EmptyText { visible: root.nm !== null && root.vpnList.length === 0; text: "No VPN profiles" }
+          }
+
+          PanelSeparator { foreground: root.bar.foreground }
+
+          // ---------- Other active connections ----------
+          Column {
+            width: parent.width
+            spacing: Style.space(10)
+
+            PanelSectionHeader {
+              text: "CONNECTIONS"
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+            }
+
+            Repeater {
+              model: root.otherList
+              ConnectionRow {
+                required property var modelData
+                required property int index
+                profile: modelData
+                rowIndex: root.vpnList.length + index
+              }
+            }
+
+            EmptyText { visible: root.nm !== null && root.otherList.length === 0; text: "No active connections" }
+          }
+
+          Button {
+            visible: root.nm !== null && root.nm.editor === true
+            width: parent.width
+            text: "Open connection editor"
+            iconText: String.fromCodePoint(0xF0493)
+            fontSize: Style.font.bodySmall
+            foreground: root.bar.foreground
+            fontFamily: root.bar.fontFamily
+            bordered: true
+            onClicked: root.openEditor()
+          }
         }
       }
     }
@@ -379,6 +403,9 @@ Panel {
 
     width: parent ? parent.width : 0
     spacing: Style.spacing.labelGap
+
+    readonly property bool hasCursor: root.cursorActive && root.cursorIndex === rowIndex
+    onHasCursorChanged: if (hasCursor) root.ensureVisible(row)
 
     Item {
       width: parent.width
@@ -452,7 +479,7 @@ Panel {
         checked: row.profile.active === true
         busy: row.busy
         foreground: root.bar.foreground
-        hasCursor: root.cursorActive && root.cursorIndex === row.rowIndex
+        hasCursor: row.hasCursor
         onToggled: root.toggleConnection(row.profile)
         onHovered: function(h) { if (h) { root.cursorActive = true; root.cursorIndex = row.rowIndex } }
       }
@@ -495,7 +522,7 @@ Panel {
         value: row.profile.fullTunnel ? "Full tunnel · all traffic" : "Split tunnel · listed IPs only"
       }
       Repeater {
-        model: row.isVpn ? Model.routeRows(row.profile, 8) : []
+        model: row.isVpn ? Model.routeRows(row.profile) : []
         CopyPair {
           required property var modelData
           label: modelData.label

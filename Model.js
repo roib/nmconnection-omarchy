@@ -127,8 +127,8 @@ function formatUptime(seconds) {
 }
 
 // Rows for the "what goes through this tunnel" list: WireGuard allowed IPs,
-// or the routes NM installed for other VPN types. Capped so a long split
-// tunnel doesn't push the popup off-screen.
+// or the routes NM installed for other VPN types. `cap` (optional) collapses
+// the tail into a "+N more" row.
 var routeHints = { "0.0.0.0/0": "all IPv4", "::/0": "all IPv6" }
 
 function routeRows(profile, cap) {
