@@ -3,14 +3,12 @@
 A bar icon that shows whether a VPN (WireGuard, OpenVPN, …) managed by
 NetworkManager is up:
 
-- **shield with check**: at least one VPN is active
-- **dimmed shield-off**: no VPN
-- **urgent colour**: NM connectivity is `limited` / `portal` / `none`
-  (disable with the `showWarningTint` setting)
+- **green shield with check**: at least one VPN is active
+- **white shield with slash**: no VPN
 
 Hover for a one-line summary. Left-click opens a popup with:
 
-- connectivity state and the DNS server(s) answering catch-all queries, with a
+- internet status (Online / No internet / Sign-in needed / Offline) and the DNS server(s) answering catch-all queries, with a
   warning if DNS can bypass an active VPN
 - every VPN profile: up/down switch, autoconnect switch, address, endpoint,
   full/split tunnel, uptime, traffic

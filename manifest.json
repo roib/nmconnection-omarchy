@@ -19,8 +19,7 @@
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
-      "refreshIntervalSec": 10,
-      "showWarningTint": true
+      "refreshIntervalSec": 10
     },
     "schema": [
       {
@@ -31,12 +30,6 @@
         "max": 3600,
         "step": 1,
         "defaultValue": 10
-      },
-      {
-        "key": "showWarningTint",
-        "type": "boolean",
-        "label": "Tint icon when connectivity is limited",
-        "defaultValue": true
       }
     ]
   }

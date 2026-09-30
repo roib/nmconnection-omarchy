@@ -61,6 +61,18 @@ function connectivityOk(state) {
   return !state || connectivityBad.indexOf(state.connectivity) === -1
 }
 
+// Plain-language names for NM connectivity states.
+var connectivityLabels = {
+  "full": "Online",
+  "limited": "No internet",
+  "portal": "Sign-in needed",
+  "none": "Offline"
+}
+
+function connectivityLabel(state) {
+  return state ? (connectivityLabels[state.connectivity] || "") : ""
+}
+
 // DNS "leak": a VPN is up but some non-VPN link still answers catch-all
 // queries (systemd-resolved "Default Route: yes").
 function dnsLeaks(state) {
@@ -88,7 +100,7 @@ function summary(state) {
   otherConnections(state).forEach(function(p) {
     parts.push(typeLabel(p) + ": " + (p.ssid || p.name))
   })
-  if (!connectivityOk(state)) parts.push("Connectivity: " + state.connectivity)
+  if (!connectivityOk(state)) parts.push(connectivityLabel(state))
   if (dnsLeaks(state)) parts.push("DNS outside VPN")
   return parts.join(" · ")
 }

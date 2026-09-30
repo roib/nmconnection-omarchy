@@ -33,13 +33,17 @@ Panel {
   readonly property var otherList: Model.otherConnections(nm)
   readonly property var rows: vpnList.concat(otherList)
   readonly property bool vpnUp: Model.activeVpns(nm).length > 0
-  readonly property bool warn: setting("showWarningTint", true) === true && nm !== null && !Model.connectivityOk(nm)
+  // Theme green from the active Omarchy theme; the shell's Color singleton
+  // doesn't expose the terminal palette.
+  property color green: "#a6e3a1"
+  readonly property color iconColor: vpnUp ? green : (bar ? bar.barForeground : Color.foreground)
   readonly property int intervalMs: Math.max(2, Number(setting("refreshIntervalSec", 10))) * 1000
 
   readonly property string glyphOn: String.fromCodePoint(0xF0565)   // md shield-check
   readonly property string glyphOff: String.fromCodePoint(0xF099E)  // md shield-off-outline
 
   function refresh() {
+    themeColors.reload()
     if (statusProc.running) { refreshPending = true; return }
     statusProc.running = true
   }
@@ -103,6 +107,16 @@ Panel {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
+  FileView {
+    id: themeColors
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/colors.toml"
+    printErrors: false
+    onLoaded: {
+      var m = text().match(/^\s*green\s*=\s*"(#[0-9a-fA-F]{6,8})"/m)
+      if (m) root.green = m[1]
+    }
+  }
+
   Process {
     id: statusProc
     command: ["bash", root.scriptPath]
@@ -153,8 +167,7 @@ Panel {
     anchors.fill: parent
     bar: root.bar
     text: root.vpnUp ? root.glyphOn : root.glyphOff
-    dimmed: root.nm !== null && !root.vpnUp && !root.warn
-    active: root.warn
+    foreground: root.iconColor
     tooltipText: root.opened ? "" : Model.summary(root.nm)
     onPressed: function(b) {
       if (b === Qt.RightButton) root.refresh()
@@ -199,7 +212,7 @@ Panel {
             id: heroIcon
             textFormat: Text.PlainText
             text: root.vpnUp ? root.glyphOn : root.glyphOff
-            color: root.vpnUp ? root.bar.foreground : Qt.darker(root.bar.foreground, 1.6)
+            color: root.vpnUp ? root.green : root.bar.foreground
             font.family: root.bar.fontFamily
             font.pixelSize: Style.font.display
             anchors.left: parent.left
@@ -242,7 +255,7 @@ Panel {
 
           Rectangle {
             id: badge
-            visible: root.nm !== null
+            visible: Model.connectivityLabel(root.nm) !== ""
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             radius: Style.cornerRadius > 0 ? height / 2 : 0
@@ -256,7 +269,7 @@ Panel {
               id: badgeText
               anchors.centerIn: parent
               textFormat: Text.PlainText
-              text: root.nm ? String(root.nm.connectivity).toUpperCase() : ""
+              text: Model.connectivityLabel(root.nm).toUpperCase()
               color: Model.connectivityOk(root.nm) ? root.bar.foreground : root.bar.urgent
               font.family: root.bar.fontFamily
               font.pixelSize: Style.font.caption
