@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "id": "roib.nmstatus",
+  "id": "io.github.roib.nmstatus",
   "name": "NM Status",
   "version": "1.0.0",
   "author": "roib",

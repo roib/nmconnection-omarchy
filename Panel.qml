@@ -11,8 +11,8 @@ import "Model.js" as Model
 // All data comes from the sibling `nm-status` script as one JSON document.
 Panel {
   id: root
-  moduleName: "roib.nmstatus"
-  ipcTarget: "roib.nmstatus"
+  moduleName: "io.github.roib.nmstatus"
+  ipcTarget: "io.github.roib.nmstatus"
 
   property var nm: null
   property bool initialLoad: true

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Collect NetworkManager connection state as a single JSON document for the
-# roib.nmstatus bar widget. Read-only: never changes any connection.
+# io.github.roib.nmstatus bar widget. Read-only: never changes any connection.
 set -uo pipefail
 
 # nmcli -t separates fields with ':' and escapes literal ':' and '\' in values.

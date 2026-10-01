@@ -1,4 +1,4 @@
-# roib.nmstatus — NetworkManager / VPN widget for the Omarchy bar
+# io.github.roib.nmstatus — NetworkManager / VPN widget for the Omarchy bar
 
 A bar icon that shows whether a VPN (WireGuard, OpenVPN, …) managed by
 NetworkManager is up:
@@ -52,21 +52,30 @@ The tests also need `node`.
 omarchy plugin add https://github.com/roib/nmconnection-omarchy --enable
 ```
 
-`omarchy plugin update roib.nmstatus` pulls new versions. To place it next to
+`omarchy plugin update io.github.roib.nmstatus` pulls new versions. To place it next to
 the built-in network icon:
 
 ```bash
-omarchy bar move roib.nmstatus --section right --before omarchy.network
+omarchy bar move io.github.roib.nmstatus --section right --before omarchy.network
 ```
+
+## Remove
+
+```bash
+omarchy plugin remove io.github.roib.nmstatus
+```
+
+This unloads the widget and deletes the plugin folder; it never touches your
+NetworkManager connections.
 
 ## Development
 
 Symlink a checkout instead of installing from git:
 
 ```bash
-ln -s ~/Projects/nmconnection-omarchy ~/.config/omarchy/plugins/roib.nmstatus
+ln -s ~/Projects/nmconnection-omarchy ~/.config/omarchy/plugins/io.github.roib.nmstatus
 omarchy-shell shell rescanPlugins
-omarchy plugin enable roib.nmstatus
+omarchy plugin enable io.github.roib.nmstatus
 ```
 
 Hot-reload does not pick up edits made through the symlink; after editing
