@@ -31,8 +31,8 @@ Hover for a one-line summary. Left-click opens a popup with:
 - every other active connection (Wi-Fi, Ethernet, …): addresses, gateway, DNS,
   signal or link speed, up/down switch
 - click any address/endpoint to copy it (`wl-copy`)
-- "Open connection editor" if `nm-connection-editor` is installed
-  (`omarchy pkg add network-manager-applet`)
+- "Open connection editor" if `nm-connection-editor` (from the
+  `network-manager-applet` package) is installed
 
 Right-click the icon to force a refresh. Updates are pushed via `nmcli monitor`,
 with a polling fallback (`refreshIntervalSec`, default 10s).
