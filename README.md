@@ -48,6 +48,9 @@ The tests also need `node`.
 
 ## Install
 
+Listed in the Omarchy plugin directory:
+<https://plugins.omarchy.org/plugin.html?id=io.github.roib.nmstatus>
+
 ```bash
 omarchy plugin add https://github.com/roib/nmconnection-omarchy --enable
 ```
