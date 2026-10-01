@@ -139,8 +139,20 @@ Panel {
     font.pixelSize: Style.font.bodySmall
   }
 
+  // NM only re-probes connectivity every few minutes, so after a VPN goes
+  // up or down its cached state can be stale (e.g. "limited" left over
+  // from the tunnel holding all DNS). Ask for a fresh check.
+  function recheckConnectivity() {
+    if (!checkProc.running) checkProc.running = true
+  }
+
+  onVpnUpChanged: if (nm) recheckConnectivity()
+
   onOpenedChanged: {
-    if (opened) refresh()
+    if (opened) {
+      refresh()
+      if (!Model.connectivityOk(nm)) recheckConnectivity()
+    }
     else { cursorActive = false; cursorIndex = -1 }
   }
 
@@ -171,6 +183,12 @@ Panel {
     running: true
     stdout: SplitParser { onRead: debounce.restart() }
     onExited: monitorRestart.restart()
+  }
+
+  Process {
+    id: checkProc
+    command: ["nmcli", "networking", "connectivity", "check"]
+    onExited: root.refresh()
   }
 
   Timer { id: debounce; interval: 300; onTriggered: root.refresh() }
