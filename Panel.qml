@@ -42,10 +42,13 @@ Panel {
   readonly property var otherList: Model.otherConnections(nm)
   readonly property var rows: vpnList.concat(otherList)
   readonly property bool vpnUp: Model.activeVpns(nm).length > 0
-  // Theme green from the active Omarchy theme; the shell's Color singleton
+  // Only an externally managed tunnel (e.g. Tailscale) is up: yellow.
+  readonly property bool externalUp: !vpnUp && Model.externalTunnels(nm).length > 0
+  // Theme colors from the active Omarchy theme; the shell's Color singleton
   // doesn't expose the terminal palette.
   property color green: "#a6e3a1"
-  readonly property color iconColor: vpnUp ? green : (bar ? bar.barForeground : Color.foreground)
+  property color yellow: "#f9e2af"
+  readonly property color iconColor: vpnUp ? green : externalUp ? yellow : (bar ? bar.barForeground : Color.foreground)
   readonly property int intervalMs: Math.max(2, Number(setting("refreshIntervalSec", 10))) * 1000
 
   readonly property string glyphOn: String.fromCodePoint(0xF0565)   // md shield-check
@@ -81,10 +84,12 @@ Panel {
   }
 
   function toggleConnection(p) {
+    if (p.external) return
     runAction(p.uuid, ["nmcli", "connection", p.active ? "down" : "up", "uuid", p.uuid])
   }
 
   function toggleAutoconnect(p) {
+    if (p.external) return
     runAction(p.uuid, ["nmcli", "connection", "modify", "uuid", p.uuid,
                        "connection.autoconnect", p.autoconnect ? "no" : "yes"])
   }
@@ -114,23 +119,38 @@ Panel {
       flick.contentY = Math.min(flick.contentHeight - flick.height, bottom + margin - flick.height)
   }
 
+  // External tunnels have no switch, so the cursor skips them.
   function moveCursor(delta) {
-    if (rows.length === 0) return
-    if (!cursorActive || cursorIndex < 0) { cursorActive = true; cursorIndex = 0; return }
-    cursorIndex = Math.max(0, Math.min(rows.length - 1, cursorIndex + delta))
+    var start = cursorActive && cursorIndex >= 0 ? cursorIndex : (delta > 0 ? -1 : rows.length)
+    var step = delta > 0 ? 1 : -1
+    for (var i = start + delta; i >= 0 && i < rows.length; i += step) {
+      if (!rows[i].external) { cursorActive = true; cursorIndex = i; return }
+    }
   }
 
+  // Height of a route list with `n` entries capped at `m` rows (matches
+  // RouteList's implicitHeight).
+  function routeListHeight(n, m) {
+    return n > 0 ? Math.min(n, m) * routeRowHeight - Style.spacing.labelGap : 0
+  }
+
+  // Pick the largest cap that keeps the popup on screen. Computed from the
+  // list lengths in one go: the column's implicitHeight only settles once
+  // per frame, so stepping and re-reading it overshoots.
   function fitRoutes() {
     var avail = panel.availableCardHeight - panel.verticalContentInset
     if (avail <= 0 || routeRowHeight <= 0) return
-    var over = column.implicitHeight - avail
-    if (over > 0.5 && routeMaxRows > routeMinRows) {
-      routeMaxRows = Math.max(routeMinRows, routeMaxRows - Math.ceil(over / routeRowHeight))
-    } else if (over < 0 && routeMaxRows < routeMaxRowsLimit) {
-      // Each active VPN has at most one list; only grow if all of them could.
-      var lists = Math.max(1, Model.activeVpns(nm).length)
-      if (-over >= routeRowHeight * lists) routeMaxRows++
+    var lens = vpnList.filter(function(p) { return p.active })
+      .map(function(p) { return Model.tunnelRoutes(p).length })
+    function total(m) {
+      return lens.reduce(function(sum, n) { return sum + routeListHeight(n, m) }, 0)
     }
+    var base = column.implicitHeight - total(routeMaxRows)
+    var best = routeMinRows
+    for (var m = routeMaxRowsLimit; m > routeMinRows; m--) {
+      if (base + total(m) <= avail + 0.5) { best = m; break }
+    }
+    routeMaxRows = best
   }
 
   FontMetrics {
@@ -164,8 +184,10 @@ Panel {
     path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/colors.toml"
     printErrors: false
     onLoaded: {
-      var m = text().match(/^\s*green\s*=\s*"(#[0-9a-fA-F]{6,8})"/m)
-      if (m) root.green = m[1]
+      var g = text().match(/^\s*green\s*=\s*"(#[0-9a-fA-F]{6,8})"/m)
+      if (g) root.green = g[1]
+      var y = text().match(/^\s*yellow\s*=\s*"(#[0-9a-fA-F]{6,8})"/m)
+      if (y) root.yellow = y[1]
     }
   }
 
@@ -284,7 +306,7 @@ Panel {
               id: heroIcon
               textFormat: Text.PlainText
               text: root.vpnUp ? root.glyphOn : root.glyphOff
-              color: root.vpnUp ? root.green : root.bar.foreground
+              color: root.vpnUp || root.externalUp ? root.iconColor : root.bar.foreground
               font.family: root.bar.fontFamily
               font.pixelSize: Style.font.display
               anchors.left: parent.left
@@ -315,7 +337,9 @@ Panel {
                 elide: Text.ElideRight
                 text: {
                   var v = Model.activeVpns(root.nm)
-                  return (v.length ? "VPN · " + v.map(function(p) { return p.name }).join(", ") : "VPN off").toUpperCase()
+                  var parts = [v.length ? "VPN · " + v.map(function(p) { return p.name }).join(", ") : "VPN off"]
+                  Model.externalTunnels(root.nm).forEach(function(p) { parts.push(p.name + " (external)") })
+                  return parts.join(" · ").toUpperCase()
                 }
                 color: Qt.darker(root.bar.foreground, 1.4)
                 font.family: root.bar.fontFamily
@@ -449,6 +473,7 @@ Panel {
     property int rowIndex: -1
     readonly property bool isVpn: Model.isVpn(profile)
     readonly property bool busy: root.busyUuid === profile.uuid
+    readonly property bool external: profile.external === true
 
     width: parent ? parent.width : 0
     spacing: Style.spacing.labelGap
@@ -463,7 +488,7 @@ Panel {
       Column {
         id: titleCol
         anchors.left: parent.left
-        anchors.right: autoChip.left
+        anchors.right: controls.left
         anchors.rightMargin: Style.space(10)
         anchors.verticalCenter: parent.verticalCenter
         spacing: 1
@@ -503,34 +528,58 @@ Panel {
         }
       }
 
-      Button {
-        id: autoChip
-        anchors.right: upSwitch.left
-        anchors.rightMargin: Style.space(8)
-        anchors.verticalCenter: parent.verticalCenter
-        text: "auto"
-        fontSize: Style.font.caption
-        foreground: root.bar.foreground
-        fontFamily: root.bar.fontFamily
-        horizontalPadding: Style.space(6)
-        verticalPadding: Style.space(2)
-        bordered: true
-        active: row.profile.autoconnect === true
-        opacity: row.profile.autoconnect ? 1 : 0.45
-        tooltipText: row.profile.autoconnect ? "Autoconnect on — click to disable" : "Autoconnect off — click to enable"
-        onClicked: if (!row.busy) root.toggleAutoconnect(row.profile)
-      }
-
-      ToggleSwitch {
-        id: upSwitch
+      Row {
+        id: controls
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        checked: row.profile.active === true
-        busy: row.busy
-        foreground: root.bar.foreground
-        hasCursor: row.hasCursor
-        onToggled: root.toggleConnection(row.profile)
-        onHovered: function(h) { if (h) { root.cursorActive = true; root.cursorIndex = row.rowIndex } }
+        spacing: Style.space(8)
+
+        // Owned by another program (e.g. tailscaled): show, but don't offer
+        // switches that would fight it.
+        Text {
+          visible: row.external
+          anchors.verticalCenter: parent.verticalCenter
+          textFormat: Text.PlainText
+          text: "external"
+          color: root.yellow
+          font.family: root.bar.fontFamily
+          font.pixelSize: Style.font.caption
+          font.bold: true
+          HoverHandler { id: externalHover }
+          PanelToolTip {
+            visible: externalHover.hovered
+            text: "Managed outside NetworkManager — use its own tool to turn it off"
+          }
+        }
+
+        Button {
+          id: autoChip
+          visible: !row.external
+          anchors.verticalCenter: parent.verticalCenter
+          text: "auto"
+          fontSize: Style.font.caption
+          foreground: root.bar.foreground
+          fontFamily: root.bar.fontFamily
+          horizontalPadding: Style.space(6)
+          verticalPadding: Style.space(2)
+          bordered: true
+          active: row.profile.autoconnect === true
+          opacity: row.profile.autoconnect ? 1 : 0.45
+          tooltipText: row.profile.autoconnect ? "Autoconnect on — click to disable" : "Autoconnect off — click to enable"
+          onClicked: if (!row.busy) root.toggleAutoconnect(row.profile)
+        }
+
+        ToggleSwitch {
+          id: upSwitch
+          visible: !row.external
+          anchors.verticalCenter: parent.verticalCenter
+          checked: row.profile.active === true
+          busy: row.busy
+          foreground: root.bar.foreground
+          hasCursor: row.hasCursor
+          onToggled: root.toggleConnection(row.profile)
+          onHovered: function(h) { if (h) { root.cursorActive = true; root.cursorIndex = row.rowIndex } }
+      }
       }
     }
 

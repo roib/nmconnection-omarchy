@@ -27,8 +27,15 @@ function vpnProfiles(state) {
   })
 }
 
+// VPNs NetworkManager runs itself. Tunnels another program owns (e.g.
+// tailscale0, "connected (externally)") are listed but read-only, and don't
+// count as "VPN up": they usually only carry their own private network.
 function activeVpns(state) {
-  return vpnProfiles(state).filter(function(p) { return p.active })
+  return vpnProfiles(state).filter(function(p) { return p.active && !p.external })
+}
+
+function externalTunnels(state) {
+  return vpnProfiles(state).filter(function(p) { return p.active && p.external })
 }
 
 function otherConnections(state) {
@@ -98,6 +105,9 @@ function summary(state) {
   else parts.push("VPN: " + vpns.map(function(p) {
     return p.name + (p.fullTunnel ? " (full tunnel)" : " (split)")
   }).join(", "))
+  externalTunnels(state).forEach(function(p) {
+    parts.push(typeLabel(p) + ": " + p.name + " (external)")
+  })
   otherConnections(state).forEach(function(p) {
     parts.push(typeLabel(p) + ": " + (p.ssid || p.name))
   })

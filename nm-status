@@ -29,7 +29,11 @@ while IFS=$'\x1f' read -r name uuid type device active autoconnect timestamp; do
 
   details='{}'
   if [[ "$active" == "yes" && -n "$device" ]]; then
-    show=$(nmcli -t -f GENERAL.IP4-CONNECTIVITY,GENERAL.IP6-CONNECTIVITY,IP4,IP6 device show "$device" 2>/dev/null)
+    show=$(nmcli -t -f GENERAL.STATE,GENERAL.IP4-CONNECTIVITY,GENERAL.IP6-CONNECTIVITY,IP4,IP6 device show "$device" 2>/dev/null)
+    # "connected (externally)": another program (e.g. tailscaled) owns the
+    # device and NM only mirrors it; toggling it from NM would break it.
+    external=false
+    field_values "GENERAL.STATE" <<<"$show" | grep -q 'externally' && external=true
     # Per-device connectivity, e.g. "3 (limited)"; keep the numeric level.
     conn4=$(field_values "GENERAL.IP4-CONNECTIVITY" <<<"$show" | grep -oE '^[0-9]+' || echo 0)
     conn6=$(field_values "GENERAL.IP6-CONNECTIVITY" <<<"$show" | grep -oE '^[0-9]+' || echo 0)
@@ -45,8 +49,8 @@ while IFS=$'\x1f' read -r name uuid type device active autoconnect timestamp; do
 
     details=$(jq -n --argjson ip4 "$ip4" --argjson ip6 "$ip6" --argjson dns "$dns" \
       --arg gw4 "$gw4" --arg gw6 "$gw6" --argjson rx "${rx:-0}" --argjson tx "${tx:-0}" --arg speed "$speed" \
-      --argjson c4 "${conn4:-0}" --argjson c6 "${conn6:-0}" \
-      '{ip4: $ip4, ip6: $ip6, dns: $dns, gateway: $gw4, gateway6: $gw6, rx: $rx, tx: $tx,
+      --argjson c4 "${conn4:-0}" --argjson c6 "${conn6:-0}" --argjson external "$external" \
+      '{ip4: $ip4, external: $external, ip6: $ip6, dns: $dns, gateway: $gw4, gateway6: $gw6, rx: $rx, tx: $tx,
         connectivityLevel: ([$c4, $c6] | max),
         speed: (if $speed == "" then null else ($speed | tonumber) end)}')
 
@@ -119,7 +123,7 @@ dns_json=$(resolvectl status --no-pager 2>/dev/null | awk '
 jq -n --arg connectivity "$connectivity" --argjson editor "$editor" \
   --argjson profiles "$profiles_json" --argjson dns "$dns_json" '
   ["unknown", "none", "portal", "limited", "full"] as $names
-  | ($profiles | map(select(.active and (.type == "wireguard" or .type == "vpn" or .type == "tun")))) as $vpns
+  | ($profiles | map(select(.active and (.external | not) and (.type == "wireguard" or .type == "vpn" or .type == "tun")))) as $vpns
   | ($profiles | map(select(.active) | .connectivityLevel // 0) | max // 0) as $best
   | {connectivity: (if ($vpns | length) > 0 and $best > 0 then $names[$best] else $connectivity end),
      nmConnectivity: $connectivity, editor: $editor, profiles: $profiles, dns: $dns}'
