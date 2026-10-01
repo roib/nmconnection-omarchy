@@ -29,6 +29,14 @@ Panel {
   property int cursorIndex: -1
   property bool cursorActive: false
 
+  // Rows a route list shows before it scrolls in place. Shrinks (down to
+  // routeMinRows) when the popup would otherwise be taller than the screen,
+  // so only the route lists scroll, not the whole popup.
+  readonly property int routeMaxRowsLimit: 8
+  readonly property int routeMinRows: 3
+  property int routeMaxRows: routeMaxRowsLimit
+  readonly property real routeRowHeight: routeMetrics.height + Style.spacing.labelGap
+
   readonly property string scriptPath: decodeURIComponent(String(Qt.resolvedUrl("nm-status")).replace(/^file:\/\//, ""))
   readonly property var vpnList: Model.vpnProfiles(nm)
   readonly property var otherList: Model.otherConnections(nm)
@@ -110,6 +118,25 @@ Panel {
     if (rows.length === 0) return
     if (!cursorActive || cursorIndex < 0) { cursorActive = true; cursorIndex = 0; return }
     cursorIndex = Math.max(0, Math.min(rows.length - 1, cursorIndex + delta))
+  }
+
+  function fitRoutes() {
+    var avail = panel.availableCardHeight - panel.verticalContentInset
+    if (avail <= 0 || routeRowHeight <= 0) return
+    var over = column.implicitHeight - avail
+    if (over > 0.5 && routeMaxRows > routeMinRows) {
+      routeMaxRows = Math.max(routeMinRows, routeMaxRows - Math.ceil(over / routeRowHeight))
+    } else if (over < 0 && routeMaxRows < routeMaxRowsLimit) {
+      // Each active VPN has at most one list; only grow if all of them could.
+      var lists = Math.max(1, Model.activeVpns(nm).length)
+      if (-over >= routeRowHeight * lists) routeMaxRows++
+    }
+  }
+
+  FontMetrics {
+    id: routeMetrics
+    font.family: root.bar ? root.bar.fontFamily : ""
+    font.pixelSize: Style.font.bodySmall
   }
 
   onOpenedChanged: {
@@ -196,9 +223,10 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(400))
-    // Only scrolls as a whole if it would be taller than the screen; long
-    // route lists scroll inside their own box instead.
+    // Long route lists scroll inside their own box and shrink to keep the
+    // popup on screen; the popup only scrolls as a last resort.
     contentHeight: panel.fittedContentHeight(column.implicitHeight)
+    onAvailableCardHeightChanged: Qt.callLater(root.fitRoutes)
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -227,6 +255,7 @@ Panel {
           id: column
           width: scrollArea.availableWidth
           spacing: Style.space(12)
+          onImplicitHeightChanged: Qt.callLater(root.fitRoutes)
 
           // ---------- Hero: shield · VPN status · connectivity badge ----------
           Item {
@@ -595,18 +624,12 @@ Panel {
     id: routeList
     property string label: ""
     property var items: []
-    property int maxRows: 8
-    readonly property real rowHeight: routeMetrics.height + listColumn.spacing
+    property int maxRows: root.routeMaxRows
+    readonly property real rowHeight: root.routeRowHeight
     readonly property bool scrolls: items.length > maxRows
 
     width: parent ? parent.width - (parent.leftPadding || 0) : 0
     implicitHeight: scrolls ? rowHeight * maxRows - listColumn.spacing : listColumn.implicitHeight
-
-    FontMetrics {
-      id: routeMetrics
-      font.family: root.bar.fontFamily
-      font.pixelSize: Style.font.bodySmall
-    }
 
     InfoLabel {
       id: routeLabel
