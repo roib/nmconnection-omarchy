@@ -105,15 +105,24 @@ while IFS=$'\x1f' read -r name uuid type device active autoconnect timestamp; do
            timestamp: ($ts | tonumber? // 0)} + $details]' <<<"$profiles_json")
 done < <(nmcli -t -f NAME,UUID,TYPE,DEVICE,ACTIVE,AUTOCONNECT,TIMESTAMP connection show 2>/dev/null | nm_split)
 
-# systemd-resolved: which links answer the catch-all ("Default Route: yes").
+# systemd-resolved: which links answer the catch-all ("Default Route: yes"),
+# plus each link's search domains. Programs like tailscaled configure resolved
+# directly, so NM doesn't know about their DNS.
 dns_json=$(resolvectl status --no-pager 2>/dev/null | awk '
-  /^Link [0-9]+ \(/ { if (link != "") emit(); link = $3; gsub(/[()]/, "", link); server = ""; def = "no"; next }
+  /^Link [0-9]+ \(/ { if (link != "") emit(); link = $3; gsub(/[()]/, "", link); server = ""; def = "no"; doms = ""; indom = 0; next }
   /^Global/ { if (link != "") emit(); link = ""; next }
-  link != "" && /Current DNS Server:/ { server = $NF }
-  link != "" && /Default Route:/ { def = $NF }
-  function emit() { printf "%s\t%s\t%s\n", link, server, def }
+  link == "" { next }
+  /DNS Domain:/ { indom = 1; sub(/.*DNS Domain:/, ""); adddoms(); next }
+  /^ *[A-Za-z ]+:/ { indom = 0 }
+  indom { adddoms(); next }
+  /Current DNS Server:/ { server = $NF }
+  /Default Route:/ { def = $NF }
+  # Routing-only domains start with "~"; keep just the search domains.
+  function adddoms(   i) { for (i = 1; i <= NF; i++) if ($i !~ /^~/) doms = doms (doms == "" ? "" : ";") $i }
+  function emit() { printf "%s\t%s\t%s\t%s\n", link, server, def, doms }
   END { if (link != "") emit() }
-' | jq -R 'split("\t") | {link: .[0], server: .[1], defaultRoute: (.[2] == "yes")}' | jq -s .)
+' | jq -R 'split("\t") | {link: .[0], server: .[1], defaultRoute: (.[2] == "yes"),
+                          domains: (.[3] // "" | split(";") | map(select(. != "")))}' | jq -s .)
 [[ -z "$dns_json" ]] && dns_json="[]"
 
 # NM's global connectivity follows the underlying device. With a VPN that

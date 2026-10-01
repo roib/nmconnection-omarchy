@@ -92,9 +92,29 @@ function dnsLeaks(state) {
   })
 }
 
+// DNS for a connection: what NM reports, or else what systemd-resolved has
+// for its device (set directly by e.g. tailscaled). Returns display text.
+function connectionDns(state, profile) {
+  if (!profile) return ""
+  if ((profile.dns || []).length > 0) return profile.dns.join(", ")
+  if (!state || !state.dns || !profile.device) return ""
+  var link = state.dns.filter(function(l) { return l.link === profile.device && l.server })[0]
+  if (!link) return ""
+  return link.server + ((link.domains || []).length ? " · " + link.domains.join(", ") : "")
+}
+
 function defaultDns(state) {
   if (!state || !state.dns) return []
   return state.dns.filter(function(l) { return l.defaultRoute && l.server })
+}
+
+// Links that only answer their own domains (split DNS), e.g. tailnet names
+// via Tailscale's MagicDNS, or the LAN's domain while a VPN takes the rest.
+function splitDns(state) {
+  if (!state || !state.dns) return []
+  return state.dns.filter(function(l) {
+    return !l.defaultRoute && l.server && (l.domains || []).length > 0
+  })
 }
 
 function summary(state) {

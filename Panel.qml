@@ -386,6 +386,16 @@ Panel {
               value: Model.defaultDns(root.nm).map(function(l) { return l.server + " (" + l.link + ")" }).join(", ") || "—"
             }
 
+            // Where names outside the catch-all go (informational).
+            Repeater {
+              model: Model.splitDns(root.nm)
+              InfoPair {
+                required property var modelData
+                label: ""
+                value: modelData.domains.join(", ") + " → " + modelData.server + " (" + modelData.link + ")"
+              }
+            }
+
             Text {
               visible: Model.dnsLeaks(root.nm)
               width: parent.width
@@ -599,9 +609,9 @@ Panel {
       }
       InfoPair { visible: !!row.profile.active && !!row.profile.gateway; label: "Gateway"; value: row.profile.gateway || "" }
       InfoPair {
-        visible: !!row.profile.active && (row.profile.dns || []).length > 0
+        visible: !!row.profile.active && value !== ""
         label: "DNS"
-        value: (row.profile.dns || []).join(", ")
+        value: Model.connectionDns(root.nm, row.profile)
       }
       InfoPair {
         visible: row.profile.ssid !== undefined && row.profile.ssid !== null
