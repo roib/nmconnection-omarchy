@@ -51,3 +51,7 @@ Hot-reload does not pick up edits made through the symlink; after editing
 files here run `omarchy restart shell`.
 
 `./nm-status | jq .` prints the raw data the widget renders.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
