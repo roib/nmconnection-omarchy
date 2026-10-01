@@ -61,6 +61,13 @@ while IFS=$'\x1f' read -r name uuid type device active autoconnect timestamp; do
     fi
   fi
 
+  # An external tunnel whose owner has stopped (e.g. `tailscale down`) keeps
+  # its interface up with only a link-local address; treat it as off.
+  if [[ "$active" == "yes" ]] && jq -e '.external and (.ip4 + .ip6 | length) == 0' <<<"$details" >/dev/null; then
+    active=no
+    details='{"external": true}'
+  fi
+
   if [[ "$type" == "wireguard" ]]; then
     # Peers print as "KEY allowed-ips=a;b endpoint=host:port ...", joined by
     # ", " when there are several. Split on the base64 public keys.
