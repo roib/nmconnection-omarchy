@@ -74,13 +74,14 @@ function connectivityLabel(state) {
 }
 
 // DNS "leak": a VPN is up but some non-VPN link still answers catch-all
-// queries (systemd-resolved "Default Route: yes").
+// queries (systemd-resolved "Default Route: yes"). Links flagged default
+// route but with no DNS server (e.g. an idle tailscale0) can't answer.
 function dnsLeaks(state) {
   var vpns = activeVpns(state)
   if (vpns.length === 0 || !state.dns) return false
   var vpnDevices = vpns.map(function(p) { return p.device })
   return state.dns.some(function(l) {
-    return l.defaultRoute && vpnDevices.indexOf(l.link) === -1
+    return l.defaultRoute && l.server && vpnDevices.indexOf(l.link) === -1
   })
 }
 
