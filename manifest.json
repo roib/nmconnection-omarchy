@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "id": "local.nmstatus",
+  "id": "roib.nmstatus",
   "name": "NM Status",
   "version": "1.0.0",
-  "author": "b",
+  "author": "roib",
   "license": "MIT",
   "description": "NetworkManager connection status with a focus on VPN / WireGuard tunnels.",
   "kinds": [

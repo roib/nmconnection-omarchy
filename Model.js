@@ -1,6 +1,6 @@
 .pragma library
 
-// Pure helpers for the local.nmstatus widget. Kept free of QML types so they
+// Pure helpers for the roib.nmstatus widget. Kept free of QML types so they
 // can be exercised with plain node.
 
 var vpnTypes = ["wireguard", "vpn", "tun"]

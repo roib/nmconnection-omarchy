@@ -1,4 +1,4 @@
-# local.nmstatus — NetworkManager / VPN widget for the Omarchy bar
+# roib.nmstatus — NetworkManager / VPN widget for the Omarchy bar
 
 A bar icon that shows whether a VPN (WireGuard, OpenVPN, …) managed by
 NetworkManager is up:
@@ -40,13 +40,33 @@ with a polling fallback (`refreshIntervalSec`, default 10s).
 Uptime is measured from when the widget saw the connection come up; for
 connections already active when the shell started it shows "—".
 
+## Requirements
+
+NetworkManager, systemd-resolved (`resolvectl`), `jq` and `wl-copy` — all part
+of a stock Omarchy install. Without systemd-resolved the DNS sections stay empty.
+The tests also need `node`.
+
 ## Install
 
 ```bash
-ln -s ~/Projects/nmconnection-omarchy ~/.config/omarchy/plugins/local.nmstatus
+omarchy plugin add https://github.com/roib/nmconnection-omarchy --enable
+```
+
+`omarchy plugin update roib.nmstatus` pulls new versions. To place it next to
+the built-in network icon:
+
+```bash
+omarchy bar move roib.nmstatus --section right --before omarchy.network
+```
+
+## Development
+
+Symlink a checkout instead of installing from git:
+
+```bash
+ln -s ~/Projects/nmconnection-omarchy ~/.config/omarchy/plugins/roib.nmstatus
 omarchy-shell shell rescanPlugins
-omarchy plugin enable local.nmstatus
-omarchy bar move local.nmstatus --section right --before omarchy.network
+omarchy plugin enable roib.nmstatus
 ```
 
 Hot-reload does not pick up edits made through the symlink; after editing
