@@ -8,9 +8,11 @@ NetworkManager is up:
   Tailscale) is up
 - **white shield with slash**: no VPN
 
-| VPN up | Tailscale only | Split tunnel, DNS warning |
-|:---:|:---:|:---:|
-| ![Full-tunnel WireGuard with Tailscale alongside](screenshots/vpn-up.png) | ![No VPN, only Tailscale: yellow](screenshots/tailscale-only.png) | ![Split-tunnel VPN with a scrolling route list and a DNS warning](screenshots/split-tunnel.png) |
+| VPN up | Tailscale only |
+|:---:|:---:|
+| ![Full-tunnel WireGuard with Tailscale alongside](screenshots/vpn-up.png) | ![No VPN, only Tailscale: yellow](screenshots/tailscale-only.png) |
+| **Split tunnel, long route list** | **DNS outside a full tunnel** |
+| ![Split-tunnel VPN with a scrolling route list and split DNS](screenshots/split-tunnel.png) | ![Full-tunnel VPN while Wi-Fi still answers DNS: warning](screenshots/dns-leak.png) |
 
 <sub>Screenshots use made-up data.</sub>
 
@@ -18,7 +20,7 @@ Hover for a one-line summary. Left-click opens a popup with:
 
 - internet status (Online / No internet / Sign-in needed / Offline) and the DNS
   server(s) answering catch-all queries, with a warning if DNS can bypass an
-  active VPN; split-DNS links (e.g. `tail1234.ts.net → 100.100.100.100`) are
+  active full-tunnel VPN; split-DNS links (e.g. `tail1234.ts.net → 100.100.100.100`) are
   listed underneath
 - every VPN profile: up/down switch, autoconnect switch, address, DNS,
   endpoint, full/split tunnel, allowed IPs / routes, uptime, traffic. Long
@@ -51,6 +53,13 @@ Hot-reload does not pick up edits made through the symlink; after editing
 files here run `omarchy restart shell`.
 
 `./nm-status | jq .` prints the raw data the widget renders.
+
+## Tests
+
+```bash
+bash test/resolved.test.sh     # resolvectl parser (resolved.awk)
+node --test test/model.test.js # Model.js helpers
+```
 
 ## License
 

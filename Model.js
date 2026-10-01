@@ -80,11 +80,13 @@ function connectivityLabel(state) {
   return state ? (connectivityLabels[state.connectivity] || "") : ""
 }
 
-// DNS "leak": a VPN is up but some non-VPN link still answers catch-all
-// queries (systemd-resolved "Default Route: yes"). Links flagged default
-// route but with no DNS server (e.g. an idle tailscale0) can't answer.
+// DNS "leak": a full-tunnel VPN is up but some non-VPN link still answers
+// catch-all queries (systemd-resolved "Default Route: yes"). Split tunnels
+// don't count: general DNS outside the tunnel is expected there. Links
+// flagged default route but with no DNS server (e.g. an idle tailscale0)
+// can't answer.
 function dnsLeaks(state) {
-  var vpns = activeVpns(state)
+  var vpns = activeVpns(state).filter(function(p) { return p.fullTunnel })
   if (vpns.length === 0 || !state.dns) return false
   var vpnDevices = vpns.map(function(p) { return p.device })
   return state.dns.some(function(l) {

@@ -1,0 +1,29 @@
+Global
+         Protocols: +LLMNR +mDNS -DNSOverTLS DNSSEC=no/unsupported
+  resolv.conf mode: stub
+
+Link 2 (wlan0)
+    Current Scopes: DNS
+         Protocols: -DefaultRoute -LLMNR -mDNS -DNSOverTLS DNSSEC=no/unsupported
+Current DNS Server: 192.168.1.1
+       DNS Servers: 192.168.1.1
+        DNS Domain: ~home.example
+     Default Route: no
+
+Link 5 (wg0)
+    Current Scopes: DNS
+         Protocols: +DefaultRoute -LLMNR -mDNS -DNSOverTLS DNSSEC=no/unsupported
+Current DNS Server: 10.64.0.1
+       DNS Servers: 10.64.0.1
+        DNS Domain: ~.
+     Default Route: yes
+
+Link 6 (tailscale0)
+    Current Scopes: DNS
+         Protocols: -DefaultRoute -LLMNR -mDNS -DNSOverTLS DNSSEC=no/unsupported
+Current DNS Server: 100.100.100.100
+       DNS Servers: 100.100.100.100 fd7a:115c:a1e0::53
+        DNS Domain: tail1234.ts.net ~0.e.1.a.c.5.1.1.a.7.d.f.ip6.arpa
+                    ~100.100.in-addr.arpa ~101.100.in-addr.arpa
+                    ~64.100.in-addr.arpa ~ts.net ~tail1234.ts.net
+     Default Route: no

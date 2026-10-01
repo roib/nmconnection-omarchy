@@ -17,6 +17,8 @@ field_values() {
 
 json_lines() { jq -R . | jq -s .; }
 
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 connectivity=$(nmcli -t networking connectivity 2>/dev/null || echo unknown)
 editor=false
 command -v nm-connection-editor >/dev/null 2>&1 && editor=true
@@ -115,20 +117,7 @@ done < <(nmcli -t -f NAME,UUID,TYPE,DEVICE,ACTIVE,AUTOCONNECT,TIMESTAMP connecti
 # systemd-resolved: which links answer the catch-all ("Default Route: yes"),
 # plus each link's search domains. Programs like tailscaled configure resolved
 # directly, so NM doesn't know about their DNS.
-dns_json=$(resolvectl status --no-pager 2>/dev/null | awk '
-  /^Link [0-9]+ \(/ { if (link != "") emit(); link = $3; gsub(/[()]/, "", link); server = ""; def = "no"; doms = ""; indom = 0; next }
-  /^Global/ { if (link != "") emit(); link = ""; next }
-  link == "" { next }
-  /DNS Domain:/ { indom = 1; sub(/.*DNS Domain:/, ""); adddoms(); next }
-  /^ *[A-Za-z ]+:/ { indom = 0 }
-  indom { adddoms(); next }
-  /Current DNS Server:/ { server = $NF }
-  /Default Route:/ { def = $NF }
-  # Routing-only domains start with "~"; keep just the search domains.
-  function adddoms(   i) { for (i = 1; i <= NF; i++) if ($i !~ /^~/) doms = doms (doms == "" ? "" : ";") $i }
-  function emit() { printf "%s\t%s\t%s\t%s\n", link, server, def, doms }
-  END { if (link != "") emit() }
-' | jq -R 'split("\t") | {link: .[0], server: .[1], defaultRoute: (.[2] == "yes"),
+dns_json=$(resolvectl status --no-pager 2>/dev/null | awk -f "$here/resolved.awk" | jq -R 'split("\t") | {link: .[0], server: .[1], defaultRoute: (.[2] == "yes"),
                           domains: (.[3] // "" | split(";") | map(select(. != "")))}' | jq -s .)
 [[ -z "$dns_json" ]] && dns_json="[]"
 
